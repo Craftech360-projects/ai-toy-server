@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from TTS.api import TTS
 from flask import Flask, send_from_directory # For HTTP Server
 from werkzeug.serving import make_server # To run Flask in thread
+import requests
 
 # --- Configuration ---
 UDP_HOST = '127.0.0.1'  # Listen on localhost for UDP
@@ -38,6 +39,10 @@ MQTT_PORT = 1883
 MQTT_TOPIC_NEW_AUDIO = "buddy/audio/new"
 MQTT_TOPIC_PLAYBACK_FINISHED = "buddy/audio/finished"
 MQTT_CLIENT_ID_SERVER = f"buddy_server_{os.getpid()}" # Unique client ID
+
+# Add ElevenLabs Configuration
+ELEVENLABS_API_KEY = "sk_5dd8578c19abe8722f0f3c2b2a23577f179c351d5a8ddc1e"
+ELEVENLABS_VOICE = "eleven_multilingual_v2"  # You can change this to any available voice
 
 # --- Global Variables ---
 audio_buffer = queue.Queue()
@@ -131,41 +136,70 @@ def setup_mqtt_server():
         print(f"[MQTT Server] Error connecting to MQTT broker: {e}")
         mqtt_client_server = None # Indicate connection failure
 
-# --- TTS Audio Generation Function ---
+# --- Modified TTS Audio Generation Function ---
 def generate_tts_audio(text, filename):
-    """Generates audio from text, saves it, and notifies via MQTT."""
-    global tts_model, mqtt_client_server
-    if not tts_model:
-        print("[Error] TTS model not initialized.", file=sys.stderr)
-        return
-
+    """Generates audio from text using ElevenLabs API, saves it, and notifies via MQTT."""
+    global mqtt_client_server
+    
     output_path = os.path.join(OUTPUT_AUDIO_DIR, filename)
     try:
-        print(f"[TTS] Generating audio for response to: {output_path}")
+        print(f"[TTS] Generating audio using ElevenLabs for response to: {output_path}")
         os.makedirs(OUTPUT_AUDIO_DIR, exist_ok=True)
-        wavs = tts_model.tts(text=text, speaker=tts_model.speakers[0] if tts_model.is_multi_speaker else None, language=tts_model.languages[0] if tts_model.is_multi_lingual else None)
-        if isinstance(wavs, list):
-             final_wav = np.array(wavs)
-        else:
-             final_wav = wavs
-        sf.write(output_path, final_wav, samplerate=tts_model.synthesizer.output_sample_rate)
+
+        # API endpoints
+        voices_url = "https://api.elevenlabs.io/v1/voices"
+        headers = {"xi-api-key": ELEVENLABS_API_KEY}
+
+        # Get available voices
+        response = requests.get(voices_url, headers=headers)
+        if response.status_code != 200:
+            raise Exception(f"Failed to get voices: {response.text}")
+            
+        voices_data = response.json()["voices"]
+        selected_voice = next((v for v in voices_data if v["name"] == ELEVENLABS_VOICE), None)
+        
+        if not selected_voice:
+            print(f"[Warning] Voice {ELEVENLABS_VOICE} not found, using first available voice")
+            selected_voice = voices_data[0]
+
+        # Generate audio using ElevenLabs API
+        tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{selected_voice['voice_id']}"
+        
+        payload = {
+            "text": text,
+            "model_id": "eleven_monolingual_v1",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        }
+
+        response = requests.post(tts_url, headers=headers, json=payload)
+        if response.status_code != 200:
+            raise Exception(f"Failed to generate audio: {response.text}")
+            
+        audio = response.content
+
+        # Save the audio to file
+        with open(output_path, 'wb') as f:
+            f.write(audio)
+        
         print(f"[TTS] Saved response audio to: {output_path}")
 
         # Publish MQTT notification
         if mqtt_client_server and mqtt_client_server.is_connected():
             result = mqtt_client_server.publish(MQTT_TOPIC_NEW_AUDIO, payload=filename, qos=1)
-            # result.wait_for_publish() # Optional: wait for publish confirmation
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                 print(f"[MQTT Server] Published notification for {filename} to {MQTT_TOPIC_NEW_AUDIO}")
+                print(f"[MQTT Server] Published notification for {filename} to {MQTT_TOPIC_NEW_AUDIO}")
             else:
-                 print(f"[MQTT Server] Failed to publish notification for {filename}. RC: {result.rc}")
+                print(f"[MQTT Server] Failed to publish notification for {filename}. RC: {result.rc}")
         else:
-             print("[MQTT Server] Cannot publish notification, client not connected.")
+            print("[MQTT Server] Cannot publish notification, client not connected.")
 
     except Exception as e:
-        print(f"[Error] TTS generation or MQTT publish failed: {e}", file=sys.stderr)
+        print(f"[Error] ElevenLabs TTS generation or MQTT publish failed: {e}", file=sys.stderr)
         if hasattr(e, 'stderr'):
-             print(f"[TTS Error Details] {e.stderr}", file=sys.stderr)
+            print(f"[TTS Error Details] {e.stderr}", file=sys.stderr)
 
 # --- LLM Interaction Function ---
 def get_toy_response(transcript):
@@ -326,9 +360,9 @@ def start_udp_server():
          print(f"[UDP Server Error] An error occurred: {e}")
          running = False # Signal other threads to stop
 
-# --- Main Server Logic ---
+# --- Modified Main Server Logic ---
 def start_server():
-    global running, groq_client, tts_model, http_server_thread
+    global running, groq_client, http_server_thread
 
     # Load .env
     load_dotenv()
@@ -337,36 +371,31 @@ def start_server():
     # Init Groq
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        print("[Error] GROQ_API_KEY not found.", file=sys.stderr); sys.exit(1)
+        print("[Error] GROQ_API_KEY not found.", file=sys.stderr)
+        sys.exit(1)
     try:
         groq_client = Groq(api_key=api_key)
         print("[*] Groq client initialized.")
     except Exception as e:
-        print(f"[Error] Failed to initialize Groq client: {e}", file=sys.stderr); sys.exit(1)
-
-    # Init TTS
-    try:
-        print(f"[*] Loading TTS model ({TTS_MODEL})...")
-        tts_model = TTS(model_name=TTS_MODEL, progress_bar=True, gpu=False)
-        print("[*] TTS model loaded successfully.")
-    except Exception as e:
-        print(f"[Error] Failed to initialize Coqui TTS model: {e}", file=sys.stderr); sys.exit(1)
+        print(f"[Error] Failed to initialize Groq client: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Init MQTT
     setup_mqtt_server()
     if not mqtt_client_server:
-         print("[Error] MQTT client setup failed. Exiting.", file=sys.stderr); sys.exit(1)
+        print("[Error] MQTT client setup failed. Exiting.", file=sys.stderr)
+        sys.exit(1)
 
     # Start HTTP server in a thread
     http_server_thread = ServerThread(flask_app, HTTP_HOST, HTTP_PORT)
-    http_server_thread.daemon = True # Allow main thread to exit even if this thread is running
+    http_server_thread.daemon = True
     http_server_thread.start()
 
     # Start Audio Processing Thread
     processor_thread = threading.Thread(target=process_audio, daemon=True)
     processor_thread.start()
 
-    # Start UDP Server (runs in main thread now)
+    # Start UDP Server
     udp_thread = threading.Thread(target=start_udp_server, daemon=True)
     udp_thread.start()
 
@@ -376,7 +405,7 @@ def start_server():
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n[*] Server shutting down initiated by user...")
-        running = False # Signal threads to stop
+        running = False
 
     # Cleanup
     print("[*] Stopping MQTT loop...")
@@ -384,10 +413,14 @@ def start_server():
         mqtt_client_server.loop_stop()
         mqtt_client_server.disconnect()
     print("[*] Waiting for threads to finish...")
-    if http_server_thread: http_server_thread.shutdown() # Request Flask server shutdown
-    if udp_thread.is_alive(): udp_thread.join(timeout=2)
-    if processor_thread.is_alive(): processor_thread.join(timeout=2)
-    if http_server_thread and http_server_thread.is_alive(): http_server_thread.join(timeout=2)
+    if http_server_thread:
+        http_server_thread.shutdown()
+    if udp_thread.is_alive():
+        udp_thread.join(timeout=2)
+    if processor_thread.is_alive():
+        processor_thread.join(timeout=2)
+    if http_server_thread and http_server_thread.is_alive():
+        http_server_thread.join(timeout=2)
     print("[*] Server stopped.")
 
 
