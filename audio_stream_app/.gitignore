@@ -1,0 +1,35 @@
+# Python virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Coqui TTS models (if downloaded locally, though often cached globally)
+# Adjust pattern if models are stored differently
+tts_models/
+*.onnx
+*.pth
+*.pt
+
+# Generated audio files
+audio_chunks/
+output_audio/
+
+# Client temporary audio files
+temp_client_audio/
+
+# Environment variables file
+.env
+
+# IDE / Editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
