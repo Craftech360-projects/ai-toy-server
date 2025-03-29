@@ -1,0 +1,41 @@
+name: ai-toy-server
+services:
+- dockerfile_path: Dockerfile
+  github:
+    branch: render
+    deploy_on_push: true
+    repo: Craftech360-projects/ai-toy-server
+  http_port: 5006
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  name: ai-toy-server
+  routes:
+  - path: /
+  health_check:
+    http_path: /health
+    port: 5006
+  envs:
+  - key: GROQ_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: ELEVENLABS_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: UDP_HOST
+    scope: RUN_TIME
+    value: "0.0.0.0"
+  - key: UDP_PORT
+    scope: RUN_TIME
+    value: "5005"
+  - key: HTTP_HOST
+    scope: RUN_TIME
+    value: "0.0.0.0"
+  - key: HTTP_PORT
+    scope: RUN_TIME
+    value: "5006"
+  - key: MQTT_BROKER
+    scope: RUN_TIME
+    value: "broker.emqx.io"
+  - key: MQTT_PORT
+    scope: RUN_TIME
+    value: "1883"
