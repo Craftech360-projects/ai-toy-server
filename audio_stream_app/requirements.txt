@@ -1,0 +1,13 @@
+numpy>=1.24.0
+soundfile>=0.12.1
+openai-whisper>=20231117
+groq>=0.4.1
+python-dotenv>=1.0.0
+TTS>=0.22.0
+Flask>=3.0.2
+requests>=2.31.0
+paho-mqtt>=1.6.1
+pygame>=2.5.2
+sounddevice>=0.4.6
+gunicorn>=21.2.0
+eventlet>=0.33.3

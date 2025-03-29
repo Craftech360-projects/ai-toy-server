@@ -19,10 +19,10 @@ from werkzeug.serving import make_server # To run Flask in thread
 import requests
 
 # --- Configuration ---
-UDP_HOST = '127.0.0.1'  # Listen on localhost for UDP
-UDP_PORT = 5005         # Port to listen on for UDP
-HTTP_HOST = '0.0.0.0'   # Listen on all interfaces for HTTP
-HTTP_PORT = 5006        # Port for HTTP file server
+UDP_HOST = os.getenv('UDP_HOST', '127.0.0.1')  # Listen on localhost for UDP
+UDP_PORT = int(os.getenv('UDP_PORT', '5005'))  # Port to listen on for UDP
+HTTP_HOST = os.getenv('HTTP_HOST', '0.0.0.0')  # Listen on all interfaces for HTTP
+HTTP_PORT = int(os.getenv('HTTP_PORT', '5006'))  # Port for HTTP file server
 BUFFER_SIZE = 4096      # Size of receiving buffer
 SAMPLE_RATE = 16000     # Sample rate expected from client (adjust if needed)
 CHANNELS = 1            # Mono audio expected
@@ -34,8 +34,8 @@ FINISHED_AUDIO_DIR = os.path.join(OUTPUT_AUDIO_DIR, "finished") # Dir for played
 TTS_MODEL = "tts_models/en/ljspeech/tacotron2-DDC" # Coqui TTS model
 
 # MQTT Configuration
-MQTT_BROKER = "broker.emqx.io"
-MQTT_PORT = 1883
+MQTT_BROKER = os.getenv('MQTT_BROKER', 'broker.emqx.io')
+MQTT_PORT = int(os.getenv('MQTT_PORT', '1883'))
 MQTT_TOPIC_NEW_AUDIO = "buddy/audio/new"
 MQTT_TOPIC_PLAYBACK_FINISHED = "buddy/audio/finished"
 MQTT_CLIENT_ID_SERVER = f"buddy_server_{os.getpid()}" # Unique client ID
@@ -59,6 +59,11 @@ http_server_thread = None # Thread for HTTP server
 
 # --- HTTP Server Setup (Flask) ---
 flask_app = Flask(__name__)
+
+@flask_app.route('/health')
+def health_check():
+    """Health check endpoint for App Platform."""
+    return {'status': 'healthy'}, 200
 
 @flask_app.route('/audio/<filename>')
 def serve_audio(filename):

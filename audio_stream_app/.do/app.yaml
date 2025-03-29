@@ -1,0 +1,45 @@
+name: audio-streaming-server
+services:
+- name: audio-server
+  dockerfile_path: Dockerfile
+  source_dir: .
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: owner/audio-stream-app  # Replace with your repo details
+  instance_size_slug: basic-xxs
+  instance_count: 1
+  http_port: 5006
+  envs:
+  - key: GROQ_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: ELEVENLABS_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: UDP_HOST
+    scope: RUN_TIME
+    value: "0.0.0.0"
+  - key: UDP_PORT
+    scope: RUN_TIME
+    value: "5005"
+  - key: HTTP_HOST
+    scope: RUN_TIME
+    value: "0.0.0.0"
+  - key: HTTP_PORT
+    scope: RUN_TIME
+    value: "5006"
+  - key: MQTT_BROKER
+    scope: RUN_TIME
+    value: "broker.emqx.io"
+  - key: MQTT_PORT
+    scope: RUN_TIME
+    value: "1883"
+  health_check:
+    http_path: /health
+    port: 5006
+    initial_delay_seconds: 30
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
