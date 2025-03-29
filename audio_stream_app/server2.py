@@ -27,7 +27,7 @@ BUFFER_SIZE = 4096      # Size of receiving buffer
 SAMPLE_RATE = 16000     # Sample rate expected from client (adjust if needed)
 CHANNELS = 1            # Mono audio expected
 DTYPE = 'int16'         # Data type expected
-TRANSCRIPTION_INTERVAL = 15 # Seconds
+TRANSCRIPTION_INTERVAL = 3 # Seconds
 AUDIO_CHUNKS_DIR = "audio_chunks" # Directory to save incoming audio
 OUTPUT_AUDIO_DIR = "output_audio" # Directory to save/serve generated TTS audio
 FINISHED_AUDIO_DIR = os.path.join(OUTPUT_AUDIO_DIR, "finished") # Dir for played audio
@@ -110,18 +110,15 @@ def on_message_server(client, userdata, msg):
     if topic == MQTT_TOPIC_PLAYBACK_FINISHED:
         filename = payload
         source_path = os.path.join(OUTPUT_AUDIO_DIR, filename)
-        dest_path = os.path.join(FINISHED_AUDIO_DIR, filename)
-        print(f"[File Mover] Attempting to move {filename} to finished folder...")
+        print(f"[MQTT Server] Received playback finished confirmation for {filename}. Cleaning up...")
         try:
-            # Ensure the destination directory exists
-            os.makedirs(FINISHED_AUDIO_DIR, exist_ok=True)
             if os.path.exists(source_path):
-                shutil.move(source_path, dest_path)
-                print(f"[File Mover] Successfully moved {filename} to {dest_path}")
+                os.remove(source_path)
+                print(f"[Cleanup] Deleted response audio file: {source_path}")
             else:
-                print(f"[File Mover] Error: Source file not found: {source_path}")
+                print(f"[Cleanup Error] File not found for cleanup: {source_path}")
         except Exception as e:
-            print(f"[File Mover] Error moving file {filename}: {e}")
+            print(f"[Cleanup Error] Failed to delete response audio file {source_path}: {e}")
 
 # --- MQTT Client Setup ---
 def setup_mqtt_server():
@@ -191,6 +188,17 @@ def generate_tts_audio(text, filename):
             result = mqtt_client_server.publish(MQTT_TOPIC_NEW_AUDIO, payload=filename, qos=1)
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 print(f"[MQTT Server] Published notification for {filename} to {MQTT_TOPIC_NEW_AUDIO} (Payload: {filename})")
+                # Schedule deletion of the response audio file after a delay
+                def delayed_cleanup(file_path, delay=10):
+                    time.sleep(delay)
+                    try:
+                        os.remove(file_path)
+                        print(f"[Delayed Cleanup] Deleted response audio file: {file_path}")
+                    except OSError as e:
+                        print(f"[Delayed Cleanup Error] Failed to delete response audio file {file_path}: {e}")
+
+                cleanup_thread = threading.Thread(target=delayed_cleanup, args=(output_path,))
+                cleanup_thread.start()
             else:
                 print(f"[MQTT Server] Failed to publish notification for {filename}. RC: {result.rc}")
         else:
@@ -304,6 +312,18 @@ def transcribe_audio_chunk(audio_data_np, sample_rate):
         print(log_message)
         with open("timing.log", "a") as log_file:
             log_file.write(log_message + "\n")
+
+        # Schedule deletion of the input audio file after a delay
+        def delayed_cleanup(file_path, delay=10):
+            time.sleep(delay)
+            try:
+                os.remove(file_path)
+                print(f"[Delayed Cleanup] Deleted input audio file: {file_path}")
+            except OSError as e:
+                print(f"[Delayed Cleanup Error] Failed to delete input audio file {file_path}: {e}")
+
+        cleanup_thread = threading.Thread(target=delayed_cleanup, args=(input_audio_filename,))
+        cleanup_thread.start()
 
     except Exception as e:
         print(f"[Error] Main processing loop failed for {input_audio_filename}: {e}", file=sys.stderr)
