@@ -1,6 +1,5 @@
 numpy
 soundfile>=0.12.1
-openai-whisper>=20231117
 groq>=0.4.1
 python-dotenv>=1.0.0
 TTS>=0.22.0

@@ -6,10 +6,10 @@ import numpy as np
 import soundfile as sf
 import io
 import os
-import whisper
 import datetime
 import sys
 import shutil # For moving files
+import base64
 import paho.mqtt.client as mqtt # For MQTT
 from groq import Groq
 from dotenv import load_dotenv
@@ -49,7 +49,6 @@ audio_buffer = queue.Queue()
 last_transcription_time = time.time()
 transcription_lock = threading.Lock()
 running = True
-whisper_model = None
 groq_client = None
 tts_model = None
 conversation_history = []
@@ -262,9 +261,9 @@ def get_toy_response(transcript):
 
 # --- Transcription Function ---
 def transcribe_audio_chunk(audio_data_np, sample_rate):
-    """Transcribes audio, gets LLM response, generates TTS, notifies client."""
-    global whisper_model
-    if whisper_model is None: return
+    """Transcribes audio using Groq's Whisper API, gets LLM response, generates TTS, notifies client."""
+    global groq_client
+    if groq_client is None: return
 
     print(f"[Transcription] Processing {len(audio_data_np) / sample_rate:.2f} seconds of audio...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
@@ -279,7 +278,27 @@ def transcribe_audio_chunk(audio_data_np, sample_rate):
         sf.write(input_audio_filename, audio_data_float32, sample_rate)
         print(f"[+] Saved audio chunk to: {input_audio_filename}")
 
-        result = whisper_model.transcribe(input_audio_filename, fp16=False)
+        # Use Groq's Audio Transcription API
+        with open(input_audio_filename, 'rb') as audio_file:
+            audio_content = audio_file.read()
+        
+        files = {
+            'file': ('audio.wav', audio_content, 'audio/wav'),
+            'model': (None, 'whisper-large-v3')
+        }
+        headers = {
+            'Authorization': f'Bearer {os.environ.get("GROQ_API_KEY")}'
+        }
+        response = requests.post(
+            'https://api.groq.com/openai/v1/audio/transcriptions',
+            headers=headers,
+            files=files
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"API Error: {response.text}")
+            
+        result = response.json()
         transcription_text = result.get('text', '').strip()
         end_transcription_time = time.time() # End timer for transcription
         transcription_time = end_transcription_time - start_time
@@ -450,15 +469,5 @@ def start_server():
 
 
 if __name__ == "__main__":
-    # Load Whisper model first (can take time)
-    try:
-        print("[*] Loading Whisper model (base)...")
-        whisper_model = whisper.load_model("base")
-        print("[*] Whisper model loaded successfully.")
-    except Exception as e:
-        print(f"[Error] Failed to load Whisper model: {e}", file=sys.stderr)
-        print("Ensure 'ffmpeg' is installed and in PATH.", file=sys.stderr)
-        sys.exit(1)
-
     # Start the main server logic
     start_server()
