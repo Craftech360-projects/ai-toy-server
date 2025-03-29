@@ -34,7 +34,7 @@ FINISHED_AUDIO_DIR = os.path.join(OUTPUT_AUDIO_DIR, "finished") # Dir for played
 TTS_MODEL = "tts_models/en/ljspeech/tacotron2-DDC" # Coqui TTS model
 
 # MQTT Configuration
-MQTT_BROKER = "broker.hivemq.com"
+MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 MQTT_TOPIC_NEW_AUDIO = "buddy/audio/new"
 MQTT_TOPIC_PLAYBACK_FINISHED = "buddy/audio/finished"
@@ -190,7 +190,7 @@ def generate_tts_audio(text, filename):
         if mqtt_client_server and mqtt_client_server.is_connected():
             result = mqtt_client_server.publish(MQTT_TOPIC_NEW_AUDIO, payload=filename, qos=1)
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                print(f"[MQTT Server] Published notification for {filename} to {MQTT_TOPIC_NEW_AUDIO}")
+                print(f"[MQTT Server] Published notification for {filename} to {MQTT_TOPIC_NEW_AUDIO} (Payload: {filename})")
             else:
                 print(f"[MQTT Server] Failed to publish notification for {filename}. RC: {result.rc}")
         else:
