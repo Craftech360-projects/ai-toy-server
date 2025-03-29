@@ -1,6 +1,7 @@
 name: ai-toy-server
 services:
-- dockerfile_path: Dockerfile
+- dockerfile_path: audio_stream_app/Dockerfile
+  source_dir: audio_stream_app
   github:
     branch: render
     deploy_on_push: true

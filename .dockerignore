@@ -1,51 +1,39 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-venv/
-ENV/
-
-# Audio files and directories
-audio_chunks/*
-output_audio/*
-temp_client_audio/*
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Environment variables
-.env
-.env.*
-
 # Git
 .git
 .gitignore
 
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv
+.env
+
+# Audio files
+audio_chunks/*
+output_audio/*
+
 # Logs
 *.log
-timing.log
 
-# Old files
-old/
+# Editor directories and files
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.docker
+Dockerfile
+.dockerignore
